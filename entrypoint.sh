@@ -34,27 +34,50 @@ PY
   echo "[entrypoint] page title set to: ${PAGE_TITLE}"
 fi
 
-# Helium only installs Web Store extensions through its "Helium services" proxy,
-# which is gated on a consent the onboarding page normally asks for. That page is
-# skipped (--no-first-run), so record the consent in the profile once. Set
-# HELIUM_SERVICES_CONSENT=0 to leave it untouched (extension installs then stay off).
-if [ "${HELIUM_SERVICES_CONSENT:-1}" = "1" ]; then
-  su "${USER:-neko}" -s /bin/sh -c 'python3 - /home/neko/.config/helium-cdp/Default/Preferences' <<'PY'
+# Remove stale Chromium profile locks. They hold the hostname of the container that
+# created them; after a hard stop/crash the new container (new hostname) would refuse
+# the profile ("profile appears to be in use by another computer"). No browser is
+# running yet at this point, so the locks are always stale here.
+for f in SingletonLock SingletonCookie SingletonSocket; do
+  rm -f "/home/neko/.config/helium-cdp/$f"
+done
+
+# Web Store extension installs.
+# Helium only downloads Web Store extensions through its "Helium services" proxy,
+# which needs two profile prefs: the services consent (normally set by Helium's
+# onboarding page, which --no-first-run skips) and "Allow extension downloads"
+# (helium.services.ext_proxy).
+#   HELIUM_EXTENSION_INSTALLS=on       (default) switch both on at every start
+#   HELIUM_EXTENSION_INSTALLS=off      switch extension downloads off at every start
+#   HELIUM_EXTENSION_INSTALLS=default  leave the profile alone; Helium's own settings decide
+EXT_MODE="$(printf '%s' "${HELIUM_EXTENSION_INSTALLS:-on}" | tr 'A-Z' 'a-z')"
+case "$EXT_MODE" in
+  on|off)
+    su "${USER:-neko}" -s /bin/sh -c "python3 - /home/neko/.config/helium-cdp/Default/Preferences $EXT_MODE" <<'PY'
 import json, os, sys
-p = sys.argv[1]
+p, mode = sys.argv[1], sys.argv[2]
 os.makedirs(os.path.dirname(p), exist_ok=True)
 try:
     d = json.load(open(p))
 except (FileNotFoundError, ValueError):
     d = {}
 svc = d.setdefault("helium", {}).setdefault("services", {})
-if svc.get("user_consented") is not True:
-    svc["user_consented"] = True
+want = {"user_consented": True, "ext_proxy": True} if mode == "on" else {"ext_proxy": False}
+changed = [k for k, v in want.items() if svc.get(k) is not v]
+if changed:
+    svc.update(want)
     tmp = p + ".tmp"
     json.dump(d, open(tmp, "w"))
     os.replace(tmp, p)
-    print("[entrypoint] Helium services consent recorded (Web Store installs enabled)")
+print("[entrypoint] Helium extension installs: %s%s" % (mode, " (changed: " + ", ".join(changed) + ")" if changed else ""))
 PY
-fi
+    ;;
+  default)
+    echo "[entrypoint] Helium extension installs: default (profile left untouched)"
+    ;;
+  *)
+    echo "[entrypoint] WARNING: unknown HELIUM_EXTENSION_INSTALLS='${HELIUM_EXTENSION_INSTALLS}', use on|off|default; leaving profile untouched"
+    ;;
+esac
 
 exec /usr/bin/supervisord -c /etc/neko/supervisord.conf
