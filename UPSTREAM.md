@@ -1,13 +1,14 @@
 # Upstream tracking
 
-This project is based on the original [Neko](https://github.com/m1k1o/neko) Chrome image and a stripped-down version of Neko's Vue client.
+This project is based on the [Neko](https://github.com/m1k1o/neko) base image with [Helium](https://github.com/imputnet/helium-linux) as the browser, and a stripped-down version of Neko's Vue client. It is a variant of [neko-chrome-cdp-docker](https://github.com/frankhommers/neko-chrome-cdp-docker); client and damagegate changes are shared between both.
 
-The goal is to stay compatible with upstream Neko behavior and feature/fix evolution, while keeping this image focused on Chrome + CDP automation.
+The goal is to stay compatible with upstream Neko behavior and feature/fix evolution, while keeping this image focused on Helium + CDP automation.
 
 ## Upstream sources
 
 - Upstream repository: <https://github.com/m1k1o/neko>
-- Base Docker image: `ghcr.io/m1k1o/neko/google-chrome:3`
+- Base Docker image: `ghcr.io/m1k1o/neko/base:3`
+- Browser: latest `helium-bin` release from `imputnet/helium-linux` (resolved at build time)
 - Local client source: `client/`
 - Upstream client source: `client/` in `m1k1o/neko`
 

@@ -10,7 +10,7 @@ services:
       - .env
 
     volumes:
-      - chrome-data:/home/neko/.config/google-chrome-cdp
+      - helium-data:/home/neko/.config/helium-cdp
 
     ports:
       - "52000-52100:52000-52100/udp"
@@ -34,7 +34,7 @@ services:
       - "traefik.http.services.neko.loadbalancer.server.port=8080"
 
 volumes:
-  chrome-data:
+  helium-data:
 
 networks:
   proxy:

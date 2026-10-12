@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
-  # Weekly rebuild so Chrome stable and the Neko base image stay current
+  # Weekly rebuild so Helium and the Neko base image stay current
   # without needing a commit. Monday 06:23 UTC.
   schedule:
     - cron: "23 6 * * 1"
@@ -57,7 +57,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # scheduled/manual runs must not reuse cached layers, otherwise the
-          # apt layer that upgrades Chrome is never re-run
+          # layer that installs the latest Helium release is never re-run
           pull: true
           no-cache: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
           cache-from: type=gha

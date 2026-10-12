@@ -20,7 +20,7 @@ session:
   cookie:
     enabled: false
 
-# Audio is disabled at Chrome level (--mute-audio, --disable-audio-output,
+# Audio is disabled at browser level (--mute-audio, --disable-audio-output,
 # --disable-audio-input) and PulseAudio is killed in the Dockerfile.
 # No neko.yaml audio config needed.
 

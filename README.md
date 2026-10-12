@@ -1,36 +1,48 @@
-# neko-chrome-cdp-docker
+# neko-helium-cdp-docker
 
-Docker setup for **Neko Chrome** with Chrome DevTools Protocol (CDP) access.
+Docker setup for **Neko + [Helium](https://github.com/imputnet/helium)** with Chrome DevTools Protocol (CDP) access, and the **full uBlock Origin** built in.
 
-This image extends the original [Neko](https://github.com/m1k1o/neko) Chrome container so the same browser session can be used both interactively through Neko's WebRTC UI and programmatically through CDP-compatible tools such as Playwright, Puppeteer, or custom automation scripts.
+This is a variant of [neko-chrome-cdp-docker](https://github.com/frankhommers/neko-chrome-cdp-docker) with Google Chrome swapped for Helium. Everything else is the same: the same browser session is used interactively through Neko's WebRTC UI and programmatically over CDP (Playwright, Puppeteer, custom tooling).
 
-## The Problem
+## Why Helium
 
-Neko is great for interactive browser access via WebRTC, but the stock Chrome image is not ideal when you also want automation access:
+Google Chrome no longer runs Manifest V2 extensions. The enterprise exception ended with Chrome 139 and the last workarounds with Chrome 150/151, so the full uBlock Origin cannot run in Chrome any more (only the MV3 "Lite" version).
 
-1. Its bundled Chrome version can lag behind what automation tooling expects
-2. Chrome in non-headless mode binds CDP to `127.0.0.1` only, so it cannot be reached directly from outside the container
-3. Neko's managed policy disables DevTools/CDP entirely (`DeveloperToolsAvailability: 2`)
+Helium is an open-source Chromium browser based on ungoogled-chromium that keeps Manifest V2 alive and ships the full uBlock Origin as a built-in component:
+
+- CDP works as in Chrome (`/json/version` reports `Chrome/<version>`), so CDP clients need no changes
+- full uBlock Origin (MV2, `webRequestBlocking`) is active out of the box, no extension install needed
+- no Google account, sync or telemetry
+
+Trade-offs compared to Google Chrome:
+
+- small, pre-1.0 project (imput); updates come from its GitHub releases
+- no Google services, sign-in or Widevine (DRM video)
+- not the official Chrome build, so sites that detect the exact browser may behave slightly differently
+
+Measured on the same pages, same host, over CDP (requests to well-known ad/tracker hosts that actually loaded):
+
+| site | Chrome (no blocker) | Helium (uBO) |
+|---|---|---|
+| nu.nl | 1 | 1 |
+| telegraaf.nl | 7 | 2 |
+| speedtest.net | 9 | 1 |
+| theverge.com | 18 | 0 |
 
 ## The Solution
 
-A custom Dockerfile that fixes all three issues:
-
-- **Upgrades Chrome stable** to the latest available version via apt
-- **Adds a socat CDP proxy** forwarding `0.0.0.0:9223` → `127.0.0.1:9222` inside the container
-- **Fixes Chrome policy** to re-enable DevTools/CDP
-
-The result: a single Neko container that serves both interactive WebRTC browsing and CDP automation. No separate headless Chrome needed.
+- **Neko base image + latest Helium release** (resolved from GitHub at build time; the weekly CI rebuild picks up new versions)
+- **socat CDP proxy** forwarding `0.0.0.0:9223` → `127.0.0.1:9222` inside the container
+- **Managed policy** in `/etc/chromium/policies/managed/` (Helium reads the Chromium location) with DevTools/CDP enabled
 
 ## Upstream
 
-This project is based on the original Neko Chrome image:
-
-- Upstream project: <https://github.com/m1k1o/neko>
-- Base image: `ghcr.io/m1k1o/neko/google-chrome:3`
+- Neko: <https://github.com/m1k1o/neko> (base image `ghcr.io/m1k1o/neko/base:3`)
+- Helium: <https://github.com/imputnet/helium-linux> (`helium-bin` .deb from the releases)
+- Chrome variant: <https://github.com/frankhommers/neko-chrome-cdp-docker>
 - Client: stripped-down Vue frontend based on Neko's original client
 
-The goal is not to replace Neko, but to package a Chrome/CDP-friendly variant for automation use cases. See `UPSTREAM.md` for the upstream tracking policy and reviewed baseline.
+See `UPSTREAM.md` for the Neko client tracking policy and reviewed baseline.
 
 ## Architecture
 
@@ -41,12 +53,12 @@ CDP-compatible client (Playwright, Puppeteer, custom tooling)
                   │
                   └─→ container 0.0.0.0:9223 (socat proxy)
                         │
-                        └─→ Chrome 127.0.0.1:9222 (non-headless)
+                        └─→ Helium 127.0.0.1:9222 (non-headless)
                               │
                               └─→ Neko WebRTC UI
 ```
 
-You can watch and interact with the browser session through Neko while automation controls the same Chrome instance over CDP.
+You can watch and interact with the browser session through Neko while automation controls the same Helium instance over CDP.
 
 ## Ports
 
@@ -96,38 +108,38 @@ await page.goto("https://example.com");
 
 ## Key Discoveries
 
-These details are easy to miss when combining Neko, Chrome, and CDP.
+These details are easy to miss when combining Neko, a Chromium browser, and CDP.
 
-### Chrome non-headless always binds CDP to 127.0.0.1
+### Non-headless Chromium always binds CDP to 127.0.0.1
 
-`--remote-debugging-address=0.0.0.0` is ignored in non-headless mode. Chrome still binds CDP to loopback. The socat proxy is the lightest-weight workaround.
+`--remote-debugging-address=0.0.0.0` is ignored in non-headless mode. Helium/Chromium still binds CDP to loopback. The socat proxy is the lightest-weight workaround.
 
 ### Neko's DevTools policy blocks CDP
 
-Neko sets `DeveloperToolsAvailability: 2` (disabled) in `/etc/opt/chrome/policies/managed/policies.json`. This image replaces that policy and sets it to `0`.
+Neko's browser images set `DeveloperToolsAvailability: 2` (disabled). This image ships its own policy in `/etc/chromium/policies/managed/policies.json` with it set to `0`. Helium reads policies from the Chromium location, not `/etc/opt/chrome`.
 
 ### Non-default user-data-dir required
 
-Chrome refuses `--remote-debugging-port` with the default profile data directory. The supervisord config uses:
+Chromium browsers refuse `--remote-debugging-port` with the default profile data directory. The supervisord config uses:
 
 ```text
-/home/neko/.config/google-chrome-cdp
+/home/neko/.config/helium-cdp
 ```
 
-### Automation client compatibility depends on Chrome/CDP version
+### Automation client compatibility depends on the Chromium/CDP version
 
-Some automation clients expect a sufficiently recent Chrome/CDP version. The Neko base image can lag behind, so this image upgrades `google-chrome-stable` during build.
+Helium tracks Chromium stable closely (e.g. Helium 0.19.2.1 = Chromium 155). The image installs the latest Helium release at build time; pin a version with `--build-arg HELIUM_VERSION=<tag>`.
 
 ### Restart clients after rebuilding the browser container
 
 When the Neko container is rebuilt or restarted, existing CDP/WebSocket connections become stale. Restart any automation process connected to the old browser instance.
 
-## Persistent Chrome Data
+## Persistent Browser Data
 
-Chrome's user data (shortcuts, preferences, cookies, extensions state) is stored in a Docker named volume (`chrome-data`) mounted at:
+Helium's user data (shortcuts, preferences, cookies, extensions state) is stored in a Docker named volume (`helium-data`) mounted at:
 
 ```text
-/home/neko/.config/google-chrome-cdp
+/home/neko/.config/helium-cdp
 ```
 
 This means:
@@ -138,22 +150,22 @@ This means:
 
 ### First-time setup
 
-New Tab Page shortcuts cannot reliably be pre-seeded via the Dockerfile. Chrome's NTP has its own internal state that updates through the UI. After first deployment, add shortcuts manually via the "Add shortcut" button on the new tab page, or use browser automation through CDP. Once added, they persist in the volume.
+New Tab Page shortcuts cannot reliably be pre-seeded via the Dockerfile. The NTP has its own internal state that updates through the UI. After first deployment, add shortcuts manually via the "Add shortcut" button on the new tab page, or use browser automation through CDP. Once added, they persist in the volume.
 
-## Chrome Policy
+## Browser Policy
 
-The Dockerfile replaces Neko's restrictive Chrome policy with a clean one (`policies.json`):
+The Dockerfile installs a clean managed policy (`policies.json`, at `/etc/chromium/policies/managed/`):
 
 - DevTools/CDP enabled
-- uBlock Origin force-installed
-- SponsorBlock removed
 - No bookmarks bar, password manager, autofill, or sync
+
+uBlock Origin needs no policy: Helium ships it as a built-in component (id `blockjmkbacgjkknlgpkjjiijinjdanf`).
 
 ## Audio
 
 Audio is force-disabled at two levels, so no `neko.yaml` audio config is needed:
 
-1. Chrome flags: `--mute-audio`, `--disable-audio-output`, `--disable-audio-input`
+1. Browser flags: `--mute-audio`, `--disable-audio-output`, `--disable-audio-input`
 2. PulseAudio disabled: Dockerfile sets `autospawn = no` and `daemon-binary = /bin/true`
 
 ## Static-screen CPU: damagegate
@@ -195,22 +207,24 @@ Neko keeps capturing and encoding the screen for as long as a viewer is connecte
 | Pause in background | on, 2 min | Pause after the tab has been hidden for N minutes (or directly). Resumes by itself when you return. |
 | Max viewing time | off, 60 min | Pause after N minutes of viewing, even while active (15 min – 4 h). |
 
-The toolbar also has a **pause** button. While paused, the WebRTC session is closed so the server stops encoding; Chrome and CDP automation keep running. Switch the timers off to passively watch a long automation run.
+The toolbar also has a **pause** button. While paused, the WebRTC session is closed so the server stops encoding; the browser and CDP automation keep running. Switch the timers off to passively watch a long automation run.
 
 ## Files
 
 ```text
-├── Dockerfile              # Multi-stage: Vue build + Chrome upgrade + socat + policy
+├── Dockerfile              # Multi-stage: Vue build + damagegate + Helium + socat + policy
 ├── docker-compose.yml      # Neko container config + persistent volume
 ├── docker-compose.yml.example
 ├── neko.yaml.example       # Neko config template
 ├── .env.example            # Credentials and deployment settings template
-├── policies.json           # Chrome managed policy (DevTools, uBlock, clean defaults)
-├── google-chrome.conf      # Supervisord: Chrome stable with CDP flags
+├── policies.json           # Managed policy (DevTools, clean defaults)
+├── helium.conf             # Supervisord: Helium with CDP flags + openbox
+├── openbox.xml             # Window manager config (Helium window undecorated, maximized)
+├── gst-damagegate/         # GStreamer element that drops unchanged frames
 ├── cdp-proxy.conf          # Supervisord: socat CDP proxy
 └── client/                 # Neko Lite Vue frontend (stripped)
 ```
 
 ## License
 
-The project-specific Docker/configuration code is licensed under MIT. The Neko-derived client code in `client/` remains under Apache License 2.0; see `THIRD_PARTY_NOTICES.md` and `LICENSES/Apache-2.0.txt`.
+The project-specific Docker/configuration code is licensed under MIT. Helium and uBlock Origin are installed from their official releases under their own licenses (both GPL-3.0); see `THIRD_PARTY_NOTICES.md`. The Neko-derived client code in `client/` remains under Apache License 2.0; see `THIRD_PARTY_NOTICES.md` and `LICENSES/Apache-2.0.txt`.

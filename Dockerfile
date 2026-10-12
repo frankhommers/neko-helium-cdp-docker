@@ -14,15 +14,31 @@ COPY gst-damagegate/ /src/
 RUN gcc -O2 -Wall -Werror -fPIC -shared -o /libgstdamagegate.so /src/gstdamagegate.c \
       $(pkg-config --cflags --libs gstreamer-1.0 gstreamer-base-1.0 gstreamer-video-1.0 x11 xdamage xfixes)
 
-# Stage 3: Final image
-FROM ghcr.io/m1k1o/neko/google-chrome:3
+# Stage 3: Final image (Neko base + Helium instead of Google Chrome)
+FROM ghcr.io/m1k1o/neko/base:3
+
+# Helium release to install. "latest" resolves the newest GitHub release at build
+# time, so the weekly CI rebuild picks up new Helium versions automatically.
+ARG HELIUM_VERSION=latest
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends openbox socat iproute2 jq ca-certificates; \
+    if [ "${HELIUM_VERSION}" = "latest" ]; then \
+      HELIUM_VERSION="$(wget -qO- https://api.github.com/repos/imputnet/helium-linux/releases/latest | jq -r .tag_name)"; \
+    fi; \
+    echo "Installing Helium ${HELIUM_VERSION}"; \
+    wget -qO /tmp/helium.deb \
+      "https://github.com/imputnet/helium-linux/releases/download/${HELIUM_VERSION}/helium-bin_${HELIUM_VERSION}-1_amd64.deb"; \
+    apt-get install -y --no-install-recommends /tmp/helium.deb; \
+    rm -f /tmp/helium.deb; \
+    /opt/helium/helium --version; \
+    echo "${HELIUM_VERSION}" > /etc/helium-version; \
+    apt-get clean -y; rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+
 COPY --from=damagegate-build /libgstdamagegate.so /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstdamagegate.so
 RUN rm -rf /var/www/*
 COPY --from=client-build /build/dist/ /var/www/
-RUN apt-get update -qq && \
-    apt-get install -y -qq socat iproute2 && \
-    apt-get install -y -qq --only-upgrade google-chrome-stable && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
@@ -31,6 +47,8 @@ ENTRYPOINT ["/entrypoint.sh"]
 RUN echo "autospawn = no" > /etc/pulse/client.conf && \
     echo "daemon-binary = /bin/true" >> /etc/pulse/client.conf
 
-COPY policies.json /etc/opt/chrome/policies/managed/policies.json
-COPY google-chrome.conf /etc/neko/supervisord/google-chrome.conf
+# Helium reads managed policies from the Chromium location
+COPY policies.json /etc/chromium/policies/managed/policies.json
+COPY openbox.xml /etc/neko/openbox.xml
+COPY helium.conf /etc/neko/supervisord/helium.conf
 COPY cdp-proxy.conf /etc/neko/supervisord/cdp-proxy.conf
