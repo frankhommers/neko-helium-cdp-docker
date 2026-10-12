@@ -165,9 +165,17 @@ uBlock Origin needs no policy: Helium ships it as a built-in component (id `bloc
 
 Besides the built-in uBlock Origin you can install extensions from the Chrome Web Store ("Add to Helium").
 
-Helium downloads Web Store extensions through its own anonymous proxy ("Helium services", `services.helium.imput.net`) and only does so after you accept them on its onboarding page. That page never shows here (`--no-first-run`), so the entrypoint records the consent in the profile (`helium.services.user_consented`) at startup. You can review or switch off individual services in `helium://settings/privacy/services`.
+Helium downloads Web Store extensions through its own anonymous proxy ("Helium services", `services.helium.imput.net`). That needs two profile settings: the services consent (normally given on Helium's onboarding page, which never shows here because of `--no-first-run`) and **Allow extension downloads** (`helium.services.ext_proxy`).
 
-Set `HELIUM_SERVICES_CONSENT=0` to leave the consent untouched; Web Store installs then fail with "Extension downloads are disabled".
+`HELIUM_EXTENSION_INSTALLS` controls this at every container start:
+
+| Value | Effect |
+|---|---|
+| `on` (default) | Consent and extension downloads are switched on. A toggle turned off by accident comes back after a restart. |
+| `off` | Extension downloads are switched off; "Add to Helium" fails with "Extension downloads are disabled". |
+| `default` | The profile is left alone; whatever is set in `helium://settings/privacy/services` applies. |
+
+Other Helium services (filter list updates, spellcheck, bangs) are not touched and can be switched off in `helium://settings/privacy/services`.
 
 ## Audio
 
