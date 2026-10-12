@@ -14,13 +14,19 @@ The goal is to stay compatible with upstream Neko behavior and feature/fix evolu
 
 ## Current reviewed upstream baseline
 
-Last reviewed upstream state (2026-09-30):
+Last reviewed upstream state (2026-10-12):
 
-- Upstream repository HEAD: `3f4f940`
-- Last upstream commit touching `client/`: `dae23a90b52bb31d8cdf047f41ae01b9bf41defa`
+- Upstream repository HEAD: `c75a2f6`
+- Last upstream commit touching `client/`: `65fba485de2987998c7028b04240b21669d674e0`
 - Upstream Neko tags containing that client commit: none yet (after `v3.1.5`)
 - Local `client/package.json` version: `2.5.0`
 - Upstream `client/package.json` version at review time: `2.5.0`
+
+### Review log 2026-10-12 (`dae23a90..65fba485`)
+
+Ported:
+
+- `65fba48` show the clipboard fallback button in Safari (#709): Safari's `clipboard.readText()` is unreliable, so it is treated like Firefox. Visible effect: in Safari on macOS/iOS the clipboard button now appears in the bottom menu while hosting; Chrome/Helium/Edge are unchanged.
 
 ### Review log 2026-09-30 (`6c743c9c..dae23a90`)
 
