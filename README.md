@@ -161,6 +161,14 @@ The Dockerfile installs a clean managed policy (`policies.json`, at `/etc/chromi
 
 uBlock Origin needs no policy: Helium ships it as a built-in component (id `blockjmkbacgjkknlgpkjjiijinjdanf`).
 
+## Installing extensions
+
+Besides the built-in uBlock Origin you can install extensions from the Chrome Web Store ("Add to Helium").
+
+Helium downloads Web Store extensions through its own anonymous proxy ("Helium services", `services.helium.imput.net`) and only does so after you accept them on its onboarding page. That page never shows here (`--no-first-run`), so the entrypoint records the consent in the profile (`helium.services.user_consented`) at startup. You can review or switch off individual services in `helium://settings/privacy/services`.
+
+Set `HELIUM_SERVICES_CONSENT=0` to leave the consent untouched; Web Store installs then fail with "Extension downloads are disabled".
+
 ## Audio
 
 Audio is force-disabled at two levels, so no `neko.yaml` audio config is needed:
