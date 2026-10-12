@@ -34,4 +34,27 @@ PY
   echo "[entrypoint] page title set to: ${PAGE_TITLE}"
 fi
 
+# Helium only installs Web Store extensions through its "Helium services" proxy,
+# which is gated on a consent the onboarding page normally asks for. That page is
+# skipped (--no-first-run), so record the consent in the profile once. Set
+# HELIUM_SERVICES_CONSENT=0 to leave it untouched (extension installs then stay off).
+if [ "${HELIUM_SERVICES_CONSENT:-1}" = "1" ]; then
+  su "${USER:-neko}" -s /bin/sh -c 'python3 - /home/neko/.config/helium-cdp/Default/Preferences' <<'PY'
+import json, os, sys
+p = sys.argv[1]
+os.makedirs(os.path.dirname(p), exist_ok=True)
+try:
+    d = json.load(open(p))
+except (FileNotFoundError, ValueError):
+    d = {}
+svc = d.setdefault("helium", {}).setdefault("services", {})
+if svc.get("user_consented") is not True:
+    svc["user_consented"] = True
+    tmp = p + ".tmp"
+    json.dump(d, open(tmp, "w"))
+    os.replace(tmp, p)
+    print("[entrypoint] Helium services consent recorded (Web Store installs enabled)")
+PY
+fi
+
 exec /usr/bin/supervisord -c /etc/neko/supervisord.conf
