@@ -179,14 +179,14 @@ Other Helium services (filter list updates, spellcheck, bangs) are not touched a
 
 ## Violentmonkey (userscripts)
 
-[Violentmonkey](https://violentmonkey.github.io/) is installed by default through the managed policy (`ExtensionInstallForcelist`), so it cannot be removed in `helium://extensions`. (`ExtensionSettings` with `normal_installed` is accepted by Helium but does not install anything.) Manifest V3 userscript managers only work when **Allow user scripts** is switched on for them, which Chrome/Helium leave off by default; the entrypoint switches it on at every start.
+[Violentmonkey](https://violentmonkey.github.io/) is installed by default as its **Manifest V2** build, which Helium still supports. MV2 runs userscripts without Chrome's "Allow user scripts" toggle and has the full GM API (including `GM_xmlhttpRequest` and `document-start` timing). The MV2 build is not in the Chrome Web Store: Violentmonkey publishes it on GitHub with its own update manifest (`updates-crx.xml`), and the managed policy (`ExtensionInstallForcelist`) points there, so Helium installs and updates it from GitHub. It cannot be removed in `helium://extensions`.
 
 | `HELIUM_VIOLENTMONKEY` | Effect |
 |---|---|
-| `on` (default) | Install Violentmonkey and allow user scripts. |
+| `on` (default) | Install Violentmonkey MV2. |
 | `off` | Don't install it; the policy-installed copy is removed by Helium, including its userscripts. |
 
-Installing needs Web Store downloads, so keep `HELIUM_EXTENSION_INSTALLS` at `on`.
+The MV2 build has a different extension ID (`fcickoepngcnapddnnmjpkmpekmfmpaa`) than the Web Store MV3 build (`jinjaccalgkegednnccohejagnlnfdag`, the default before). Scripts don't move over by themselves: export them in the old one (Settings → Backup) and import them in the new one.
 
 ## Audio
 
