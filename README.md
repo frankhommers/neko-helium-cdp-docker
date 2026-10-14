@@ -188,6 +188,29 @@ Other Helium services (filter list updates, spellcheck, bangs) are not touched a
 
 The MV2 build has a different extension ID (`fcickoepngcnapddnnmjpkmpekmfmpaa`) than the Web Store MV3 build (`jinjaccalgkegednnccohejagnlnfdag`, the default before). Scripts don't move over by themselves: export them in the old one (Settings → Backup) and import them in the new one.
 
+## Client certificates (mTLS)
+
+For sites or services that require a client certificate (e.g. a self-hosted password manager behind mTLS), mount a directory with your certificates. Helium's certificate store is rebuilt from that directory at every start; it is the single source of truth.
+
+```yaml
+volumes:
+  - ./config/client-certs:/client-certs:ro
+environment:
+  CLIENT_CERT_AUTOSELECT: "https://vault.example.com"   # optional
+```
+
+| File | Meaning |
+|---|---|
+| `<name>.p12` / `<name>.pfx` | Client certificate with its private key. |
+| `<name>.pass` | Password for `<name>.p12` (one line, no newline needed). Leave it out for an empty password. |
+| `<name>.crt` / `<name>.pem` | Extra CA to trust, e.g. the CA that signed a private server certificate. |
+
+- Add, replace or remove files, then restart the container. The log shows what was imported (`client certificate imported: ...`) and why something failed.
+- `CLIENT_CERT_AUTOSELECT` (comma-separated URL patterns such as `https://vault.example.com` or `https://[*.]example.org`) makes Helium present the certificate without asking. That's needed for browser extensions and CDP automation, which can't answer the certificate prompt. Without it, Helium asks once per site in the UI.
+- Certificates imported by hand in `chrome://certificate-manager` are **not** kept across restarts; put them in the directory instead.
+- Keep the directory readable for root only (`chmod 700`, files `600`); the container reads it as root at start.
+- Anyone who can control this browser (the Neko host, anything with CDP access) can use the certificate. Prefer a certificate issued for this browser only, so it can be revoked on its own.
+
 ## Audio
 
 Audio is force-disabled at two levels, so no `neko.yaml` audio config is needed:

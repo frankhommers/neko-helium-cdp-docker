@@ -23,7 +23,7 @@ ARG HELIUM_VERSION=latest
 
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends openbox socat iproute2 jq ca-certificates; \
+    apt-get install -y --no-install-recommends openbox socat iproute2 jq ca-certificates libnss3-tools; \
     if [ "${HELIUM_VERSION}" = "latest" ]; then \
       HELIUM_VERSION="$(wget -qO- https://api.github.com/repos/imputnet/helium-linux/releases/latest | jq -r .tag_name)"; \
     fi; \
