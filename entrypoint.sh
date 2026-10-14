@@ -80,45 +80,27 @@ PY
     ;;
 esac
 
-# Violentmonkey (userscript manager), shipped by default.
-#   HELIUM_VIOLENTMONKEY=on  (default) force-install it via managed policy (cannot be
-#                            removed in the UI) and switch on "Allow user scripts" at every start;
-#                            Manifest V3 userscript managers do nothing without that toggle.
+# Violentmonkey (userscript manager), shipped by default as the Manifest V2 build.
+# MV2 (still supported by Helium) runs userscripts without Chrome's "Allow user scripts"
+# toggle and supports the full GM API. It is not in the Web Store: Violentmonkey publishes
+# the MV2 .crx on GitHub with its own update manifest, so Helium keeps it up to date.
+#   HELIUM_VIOLENTMONKEY=on  (default) force-install the MV2 build via managed policy
+#                            (cannot be removed in the UI).
 #   HELIUM_VIOLENTMONKEY=off don't install it (a policy-installed copy is removed by Helium).
-# Installing needs Web Store downloads (HELIUM_EXTENSION_INSTALLS=on).
-VM_ID=jinjaccalgkegednnccohejagnlnfdag
+VM_ID=fcickoepngcnapddnnmjpkmpekmfmpaa
+VM_UPDATE=https://raw.githubusercontent.com/violentmonkey/violentmonkey/updates/updates-crx.xml
+VM_MV3_ID=jinjaccalgkegednnccohejagnlnfdag   # earlier Web Store (MV3) default, removed again
 VM_MODE="$(printf '%s' "${HELIUM_VIOLENTMONKEY:-on}" | tr 'A-Z' 'a-z')"
-python3 - /etc/chromium/policies/managed/policies.json "$VM_ID" "$VM_MODE" <<'PY'
+python3 - /etc/chromium/policies/managed/policies.json "$VM_ID" "$VM_UPDATE" "$VM_MV3_ID" "$VM_MODE" <<'PY'
 import json, sys
-p, vm, mode = sys.argv[1:4]
+p, vm, update, mv3, mode = sys.argv[1:6]
 d = json.load(open(p))
-# ID only: Helium routes default Web Store updates through its services proxy;
-# an explicit clients2.google.com update URL bypasses that and never installs.
-entry = vm
-force = [e for e in d.get("ExtensionInstallForcelist", []) if not e.startswith(vm)]
+force = [e for e in d.get("ExtensionInstallForcelist", []) if not e.startswith((vm, mv3))]
 if mode != "off":
-    force.append(entry)
+    force.append(vm + ";" + update)
 d["ExtensionInstallForcelist"] = force
 json.dump(d, open(p, "w"), indent=2)
 PY
-if [ "$VM_MODE" != "off" ]; then
-  su "${USER:-neko}" -s /bin/sh -c "python3 - /home/neko/.config/helium-cdp/Default/Preferences $VM_ID" <<'PY'
-import json, os, sys
-p, vm = sys.argv[1], sys.argv[2]
-os.makedirs(os.path.dirname(p), exist_ok=True)
-try:
-    d = json.load(open(p))
-except (FileNotFoundError, ValueError):
-    d = {}
-s = d.setdefault("extensions", {}).setdefault("settings", {}).setdefault(vm, {})
-if s.get("user_scripts_enabled") is not True:
-    s["user_scripts_enabled"] = True
-    tmp = p + ".tmp"
-    json.dump(d, open(tmp, "w"))
-    os.replace(tmp, p)
-    print("[entrypoint] Violentmonkey: user scripts allowed")
-PY
-fi
-echo "[entrypoint] Violentmonkey: ${VM_MODE}"
+echo "[entrypoint] Violentmonkey (MV2): ${VM_MODE}"
 
 exec /usr/bin/supervisord -c /etc/neko/supervisord.conf
