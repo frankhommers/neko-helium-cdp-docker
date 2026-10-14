@@ -103,4 +103,58 @@ json.dump(d, open(p, "w"), indent=2)
 PY
 echo "[entrypoint] Violentmonkey (MV2): ${VM_MODE}"
 
+# Client certificates (mTLS) and extra trusted CAs from a mounted directory.
+# The directory is the source of truth: Helium's NSS store is rebuilt from it at every
+# start, so removing a file removes the certificate after a restart.
+#   <dir>/<name>.p12 (or .pfx)   client certificate + key; password in <name>.pass
+#                                (no .pass file = empty password)
+#   <dir>/<name>.crt (or .pem)   CA certificate to trust (e.g. a private server CA)
+# CLIENT_CERTS_DIR         directory to read (default /client-certs; mount it read-only)
+# CLIENT_CERT_AUTOSELECT   comma-separated URL patterns for which Helium picks a client
+#                          certificate without asking (AutoSelectCertificateForUrls), e.g.
+#                          "https://vault.example.com,https://[*.]example.org"
+CERT_DIR="${CLIENT_CERTS_DIR:-/client-certs}"
+NSSDB=/home/neko/.pki/nssdb
+rm -rf "$NSSDB"; mkdir -p "$NSSDB"
+certutil -N -d "sql:$NSSDB" --empty-password >/dev/null 2>&1
+if [ -d "$CERT_DIR" ]; then
+  for f in "$CERT_DIR"/*.p12 "$CERT_DIR"/*.pfx; do
+    [ -f "$f" ] || continue
+    pass="${f%.*}.pass"
+    if [ -f "$pass" ]; then
+      out=$(pk12util -i "$f" -d "sql:$NSSDB" -w "$pass" 2>&1)
+    else
+      out=$(pk12util -i "$f" -d "sql:$NSSDB" -W "" 2>&1)
+    fi
+    if [ $? -eq 0 ]; then
+      echo "[entrypoint] client certificate imported: $(basename "$f")"
+    else
+      echo "[entrypoint] WARNING: could not import $(basename "$f"): $(echo "$out" | tail -1)"
+    fi
+  done
+  for f in "$CERT_DIR"/*.crt "$CERT_DIR"/*.pem; do
+    [ -f "$f" ] || continue
+    if certutil -A -d "sql:$NSSDB" -n "$(basename "${f%.*}")" -t "C,," -i "$f" 2>/dev/null; then
+      echo "[entrypoint] trusted CA imported: $(basename "$f")"
+    else
+      echo "[entrypoint] WARNING: could not import CA $(basename "$f")"
+    fi
+  done
+fi
+chown -R neko:neko /home/neko/.pki
+chmod 700 /home/neko/.pki "$NSSDB"
+python3 - /etc/chromium/policies/managed/policies.json "${CLIENT_CERT_AUTOSELECT:-}" <<'PY'
+import json, sys
+p, raw = sys.argv[1], sys.argv[2]
+patterns = [x.strip() for x in raw.split(",") if x.strip()]
+d = json.load(open(p))
+if patterns:
+    # empty filter: the first certificate the server accepts is used without a prompt
+    d["AutoSelectCertificateForUrls"] = [json.dumps({"pattern": x, "filter": {}}) for x in patterns]
+    print("[entrypoint] client certificate auto-select for: " + ", ".join(patterns))
+else:
+    d.pop("AutoSelectCertificateForUrls", None)
+json.dump(d, open(p, "w"), indent=2)
+PY
+
 exec /usr/bin/supervisord -c /etc/neko/supervisord.conf
