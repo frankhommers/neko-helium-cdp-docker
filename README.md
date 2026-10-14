@@ -177,6 +177,17 @@ Helium downloads Web Store extensions through its own anonymous proxy ("Helium s
 
 Other Helium services (filter list updates, spellcheck, bangs) are not touched and can be switched off in `helium://settings/privacy/services`.
 
+## Violentmonkey (userscripts)
+
+[Violentmonkey](https://violentmonkey.github.io/) is installed by default through the managed policy (`ExtensionInstallForcelist`), so it cannot be removed in `helium://extensions`. (`ExtensionSettings` with `normal_installed` is accepted by Helium but does not install anything.) Manifest V3 userscript managers only work when **Allow user scripts** is switched on for them, which Chrome/Helium leave off by default; the entrypoint switches it on at every start.
+
+| `HELIUM_VIOLENTMONKEY` | Effect |
+|---|---|
+| `on` (default) | Install Violentmonkey and allow user scripts. |
+| `off` | Don't install it; the policy-installed copy is removed by Helium, including its userscripts. |
+
+Installing needs Web Store downloads, so keep `HELIUM_EXTENSION_INSTALLS` at `on`.
+
 ## Audio
 
 Audio is force-disabled at two levels, so no `neko.yaml` audio config is needed:
